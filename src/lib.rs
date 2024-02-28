@@ -1,3 +1,5 @@
+use std::{fmt::{self, Display, Formatter}, str::FromStr};
+
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Board {
@@ -14,19 +16,118 @@ const FILE_H: u64 = 0x8080_8080_8080_8080;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Move {
     Single {
-        to: u8,
+        to: Square,
     },
     Double {
-        from: u8,
-        to: u8,
+        from: Square,
+        to: Square,
     },
     Pass,
+}
+
+static SQUARE_NAMES: [&str; 64] = [
+    "a1", "b1", "c1", "d1", "e1", "f1", "g1", "h1", "a2", "b2", "c2", "d2", "e2", "f2", "g2", "h2",
+    "a3", "b3", "c3", "d3", "e3", "f3", "g3", "h3", "a4", "b4", "c4", "d4", "e4", "f4", "g4", "h4",
+    "a5", "b5", "c5", "d5", "e5", "f5", "g5", "h5", "a6", "b6", "c6", "d6", "e6", "f6", "g6", "h6",
+    "a7", "b7", "c7", "d7", "e7", "f7", "g7", "h7", "a8", "b8", "c8", "d8", "e8", "f8", "g8", "h8",
+];
+
+impl Display for Square {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = SQUARE_NAMES.get(self.index()).copied();
+        if let Some(name) = name {
+            write!(f, "{name}")
+        } else if self.0 == 64 {
+            write!(f, "NO_SQUARE")
+        } else {
+            write!(f, "ILLEGAL: Square({})", self.0)
+        }
+    }
+}
+
+impl std::fmt::Debug for Square {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = SQUARE_NAMES.get(self.index()).copied();
+        if let Some(name) = name {
+            write!(f, "{name}")
+        } else if self.0 == 64 {
+            write!(f, "NO_SQUARE")
+        } else {
+            write!(f, "ILLEGAL: Square({})", self.0)
+        }
+    }
+}
+
+impl FromStr for Square {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        SQUARE_NAMES
+            .iter()
+            .position(|&name| name == s)
+            .and_then(|index| -> Option<u8> { index.try_into().ok() })
+            .map(Self::new)
+            .ok_or("Invalid square name")
+    }
+}
+
+
+impl FromStr for Move {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s == "0000" {
+            return Ok(Move::Pass);
+        }
+
+        match s.len() {
+            2 => {
+                if let Ok(sq) = Square::from_str(&s[0..2]) {
+                    Ok(Self::Single { to: sq })
+                } else {
+                    Err("Invalid square name")
+                }
+            }
+            4 => {
+                if let Ok(from) = Square::from_str(&s[0..2]) {
+                    if let Ok(to) = Square::from_str(&s[2..4]) {
+                        Ok(Self::Double { from, to })
+                    } else {
+                        Err("invalid to-square name")
+                    }
+                } else {
+                    Err("invalid from-square name")
+                }
+            }
+            _ => Err("invalid move length"),
+        }
+    }
+}
+
+impl Display for Move {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            Move::Pass => write!(f, "0000"),
+            Move::Single { to } => write!(f, "{}", to),
+            Move::Double { from, to } => write!(f, "{}{}", from, to),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Player {
     White,
     Black,
+}
+
+impl Player {
+    pub fn to_char(self) -> char {
+        match self {
+            Player::White => 'x',
+            Player::Black => 'o',
+        }
+    }
+
 }
 
 impl Default for Board {
@@ -123,6 +224,141 @@ impl Square {
     pub const G8: Self = Self(62);
     pub const H8: Self = Self(63);
     pub const NO_SQUARE: Self = Self(64);
+
+    pub const fn from_rank_file(rank: u8, file: u8) -> Self {
+        let inner = rank * 8 + file;
+        debug_assert!(inner <= 64);
+        Self(inner)
+    }
+
+    pub const fn new(inner: u8) -> Self {
+        debug_assert!(inner <= 64);
+        Self(inner)
+    }
+
+    pub const fn flip_rank(self) -> Self {
+        Self(self.0 ^ 0b111_000)
+    }
+
+    pub const fn flip_file(self) -> Self {
+        Self(self.0 ^ 0b000_111)
+    }
+
+    pub const fn relative_to(self, side: Player) -> Self {
+        if matches!(side, Player::White) {
+            self
+        } else {
+            self.flip_rank()
+        }
+    }
+
+    /// The file that this square is on.
+    pub const fn file(self) -> u8 {
+        self.0 % 8
+    }
+    /// The rank that this square is on.
+    pub const fn rank(self) -> u8 {
+        self.0 / 8
+    }
+
+    pub fn distance(a: Self, b: Self) -> u8 {
+        std::cmp::max(a.file().abs_diff(b.file()), a.rank().abs_diff(b.rank()))
+    }
+
+    pub const fn signed_inner(self) -> i8 {
+        #![allow(clippy::cast_possible_wrap)]
+        self.0 as i8
+    }
+
+    pub const fn index(self) -> usize {
+        self.0 as usize
+    }
+
+    pub const fn inner(self) -> u8 {
+        self.0
+    }
+
+    pub const fn add(self, offset: u8) -> Self {
+        #![allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_possible_wrap,
+            clippy::cast_sign_loss
+        )]
+        let res = self.0 + offset;
+        debug_assert!(res < 64, "Square::add overflowed");
+        Self(res)
+    }
+
+    pub const fn add_beyond_board(self, offset: u8) -> Self {
+        #![allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_possible_wrap,
+            clippy::cast_sign_loss
+        )]
+        let res = self.0 + offset;
+        debug_assert!(res < 65, "Square::add_beyond_board overflowed");
+        Self(res)
+    }
+
+    pub const fn sub(self, offset: u8) -> Self {
+        #![allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_possible_wrap,
+            clippy::cast_sign_loss
+        )]
+        let res = self.0 - offset;
+        debug_assert!(res < 64, "Square::sub overflowed");
+        Self(res)
+    }
+
+    pub const fn on_board(self) -> bool {
+        self.0 < 64
+    }
+
+    pub const fn as_set(self) -> u64 {
+        1 << self.0
+    }
+
+    pub fn pawn_push(self, side: Player) -> Self {
+        if side == Player::White {
+            self.add(8)
+        } else {
+            self.sub(8)
+        }
+    }
+
+    pub fn pawn_right(self, side: Player) -> Self {
+        if side == Player::White {
+            self.add(9)
+        } else {
+            self.sub(7)
+        }
+    }
+
+    pub fn pawn_left(self, side: Player) -> Self {
+        if side == Player::White {
+            self.add(7)
+        } else {
+            self.sub(9)
+        }
+    }
+
+    #[rustfmt::skip]
+    pub const fn le(self, other: Self) -> bool { self.0 <= other.0 }
+    #[rustfmt::skip]
+    pub const fn ge(self, other: Self) -> bool { self.0 >= other.0 }
+    #[rustfmt::skip]
+    pub const fn lt(self, other: Self) -> bool { self.0 < other.0  }
+    #[rustfmt::skip]
+    pub const fn gt(self, other: Self) -> bool { self.0 > other.0  }
+
+    pub fn all() -> impl Iterator<Item = Self> {
+        (0..64).map(Self::new)
+    }
+
+    pub fn name(self) -> Option<&'static str> {
+        SQUARE_NAMES.get(self.index()).copied()
+    }
 }
 
 impl Board {
@@ -149,7 +385,7 @@ impl Board {
             Move::Pass => {}
             Move::Single { to } => {
                 self.halfmove = 0;
-                let to = 1 << to;
+                let to = to.as_set();
                 let flip_zone = expand(to);
                 if self.turn() == Player::White {
                     self.white ^= to;
@@ -165,8 +401,8 @@ impl Board {
             }
             Move::Double { from, to } => {
                 self.halfmove += 1;
-                let from = 1 << from;
-                let to = 1 << to;
+                let from = from.as_set();
+                let to = to.as_set();
                 let flip_zone = expand(to);
                 if self.turn() == Player::White {
                     self.white ^= from | to;
@@ -200,7 +436,7 @@ impl Board {
         let mut any_generated = singles != 0;
 
         while singles != 0 {
-            let to = singles.trailing_zeros() as u8;
+            let to = Square::new(singles.trailing_zeros() as u8);
             singles &= singles - 1;
             if listener(Move::Single { to }) {
                 return;
@@ -209,13 +445,13 @@ impl Board {
 
         let mut doubles_src = us;
         while doubles_src != 0 {
-            let from = doubles_src.trailing_zeros() as u8;
+            let from = Square::new(doubles_src.trailing_zeros() as u8);
             doubles_src &= doubles_src - 1;
-            let local_singles = expand(1 << from);
+            let local_singles = expand(from.as_set());
             let mut doubles_tgt = expand(local_singles) & empty & !local_singles;
             any_generated |= doubles_tgt != 0;
             while doubles_tgt != 0 {
-                let to = doubles_tgt.trailing_zeros() as u8;
+                let to = Square::new(doubles_tgt.trailing_zeros() as u8);
                 doubles_tgt &= doubles_tgt - 1;
                 if listener(Move::Double { from, to }) {
                     return;
@@ -234,6 +470,103 @@ impl Board {
             || (self.white | self.black | self.walls) & BB_ALL == BB_ALL
             || self.halfmove >= 100
             || expand(expand(self.white | self.black)) & !((self.white | self.black) | self.walls) & BB_ALL == 0
+    }
+
+    pub fn player_at(&self, sq: Square) -> Option<Player> {
+        if self.white & sq.as_set() != 0 {
+            Some(Player::White)
+        } else if self.black & sq.as_set() != 0 {
+            Some(Player::Black)
+        } else {
+            None
+        }
+    }
+
+    pub fn wall_at(&self, sq: Square) -> bool {
+        self.walls & sq.as_set() != 0
+    }
+
+    pub fn fen(&self) -> String {
+        let mut fen = String::new();
+
+        for rank in (0u8..7).rev() {
+            let mut file: u8 = 0;
+
+            while file < 7 {
+                let sq = Square::from_rank_file(rank, file);
+
+                match self.player_at(sq) {
+                    Some(p) => fen.push(p.to_char()),
+                    None => {
+                        if self.wall_at(sq) {
+                            fen.push('-');
+                        } else {
+                            let mut empty_squares: u32 = 1;
+
+                            while file < 6
+                                && self.player_at(Square::from_rank_file(rank, file + 1)).is_none()
+                            {
+                                file += 1;
+                                empty_squares += 1;
+                            }
+
+                            fen += empty_squares.to_string().as_str();
+                        }
+                    }
+                }
+
+                file += 1;
+            }
+
+            if rank > 0 {
+                fen.push('/');
+            }
+        }
+
+        fen + format!(
+            " {} {} {}",
+            self.turn().to_char(),
+            self.halfmove,
+            self.ply / 2 + 1
+        )
+        .as_str()
+    }
+}
+
+impl Display for Board {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        for rank in (0u8..7).rev() {
+            writeln!(f, " +---+---+---+---+---+---+---+")?;
+
+            for file in 0u8..7 {
+                let sq = Square::from_rank_file(rank, file);
+                write!(
+                    f,
+                    " | {}",
+                    if self.wall_at(sq) {
+                        '-'
+                    } else {
+                        self.player_at(sq).map_or(' ', |p| p.to_char())
+                    }
+                )?;
+            }
+
+            writeln!(f, " | {}", rank + 1)?;
+        }
+
+        writeln!(f, " +---+---+---+---+---+---+---+")?;
+        writeln!(f, "   a   b   c   d   e   f   g")?;
+        writeln!(f)?;
+
+        write!(
+            f,
+            "{} to move",
+            if self.turn() == Player::White {
+                "White"
+            } else {
+                "Black"
+            }
+        )
     }
 }
 

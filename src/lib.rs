@@ -1,4 +1,4 @@
-use std::{fmt::{self, Display, Formatter}, str::FromStr};
+use std::{cmp::Ordering, fmt::{self, Display, Formatter}, str::FromStr};
 
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -128,6 +128,13 @@ impl Player {
         }
     }
 
+    pub fn from_char(c: char) -> Option<Player> {
+        match c {
+            'x' => Some(Player::White),
+            'o' => Some(Player::Black),
+            _ => None,
+        }
+    }
 }
 
 impl Default for Board {
@@ -531,6 +538,98 @@ impl Board {
         )
         .as_str()
     }
+
+    fn reset_from_fen_parts(&mut self, parts: &[&str]) -> Result<(), FenError> {
+        if parts.len() < 4 {
+            return Err(FenError::NotEnoughParts);
+        }
+
+        let ranks: Vec<&str> = parts[0].split('/').collect();
+
+        match ranks.len().cmp(&7) {
+            Ordering::Less => return Err(FenError::NotEnoughRanks),
+            Ordering::Greater => return Err(FenError::TooManyRanks),
+            Ordering::Equal => {}
+        }
+
+        let mut state = Self::default();
+
+        for (rank_idx, rank) in ranks.iter().enumerate() {
+            let mut file_idx: u8 = 0;
+
+            for c in rank.chars() {
+                if file_idx >= 8 {
+                    return Err(FenError::TooManyFiles(rank_idx as u32));
+                }
+
+                if let Some(empty_squares) = c.to_digit(10) {
+                    file_idx += empty_squares as u8;
+                } else {
+                    let sq = Square::from_rank_file(6 - rank_idx as u8, file_idx);
+
+                    if let Some(color) = Player::from_char(c) {
+                        match color {
+                            Player::White => state.white |= sq.as_set(),
+                            Player::Black => state.black |= sq.as_set(),
+                        }
+                        file_idx += 1;
+                    } else if c == '-' {
+                        state.walls |= sq.as_set();
+                        file_idx += 1;
+                    } else {
+                        return Err(FenError::InvalidChar(c));
+                    }
+                }
+            }
+
+            match file_idx.cmp(&7) {
+                Ordering::Less => return Err(FenError::NotEnoughFiles(rank_idx as u32)),
+                Ordering::Greater => return Err(FenError::TooManyFiles(rank_idx as u32)),
+                Ordering::Equal => {}
+            }
+        }
+
+        if parts[1].len() != 1 {
+            return Err(FenError::InvalidStm);
+        }
+
+        let black_to_move = if let Some(stm) = Player::from_char(parts[1].chars().nth(0).unwrap()) {
+            stm == Player::Black
+        } else {
+            return Err(FenError::InvalidStm);
+        };
+
+        if let Ok(halfmove) = parts[2].parse::<u8>() {
+            state.halfmove = halfmove;
+        } else {
+            return Err(FenError::InvalidHalfmove);
+        }
+
+        let fullmove = if let Ok(fullmove) = parts[3].parse::<u32>() {
+            fullmove
+        } else {
+            return Err(FenError::InvalidFullmove);
+        };
+
+        self.ply = ((fullmove - 1) * 2 + if black_to_move { 1 } else { 0 }) as u8;
+
+        Ok(())
+    }
+
+    pub fn reset_from_fen(&mut self, fen: &str) -> Result<(), FenError> {
+        let parts: Vec<&str> = fen.split_whitespace().collect();
+        self.reset_from_fen_parts(parts.as_slice())
+    }
+}
+
+impl FromStr for Board {
+    type Err = FenError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut board = Board::default();
+        board.reset_from_fen(s)?;
+        Ok(board)
+    }
 }
 
 impl Display for Board {
@@ -567,6 +666,35 @@ impl Display for Board {
                 "Black"
             }
         )
+    }
+}
+
+#[derive(Debug)]
+pub enum FenError {
+    NotEnoughParts,
+    NotEnoughRanks,
+    TooManyRanks,
+    NotEnoughFiles(u32),
+    TooManyFiles(u32),
+    InvalidChar(char),
+    InvalidStm,
+    InvalidHalfmove,
+    InvalidFullmove,
+}
+
+impl Display for FenError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FenError::NotEnoughParts => write!(f, "Incomplete FEN"),
+            FenError::NotEnoughRanks => write!(f, "Not enough ranks in FEN"),
+            FenError::TooManyRanks => write!(f, "Too many ranks in FEN"),
+            FenError::NotEnoughFiles(rank) => write!(f, "Not enough files in rank {}", rank + 1),
+            FenError::TooManyFiles(rank) => write!(f, "Too many files in rank {}", rank + 1),
+            FenError::InvalidChar(c) => write!(f, "Invalid character '{}' in FEN", c),
+            FenError::InvalidStm => write!(f, "Invalid side to move in FEN"),
+            FenError::InvalidHalfmove => write!(f, "Invalid halfmove clock in FEN"),
+            FenError::InvalidFullmove => write!(f, "Invalid fullmove number in FEN"),
+        }
     }
 }
 

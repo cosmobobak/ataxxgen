@@ -479,6 +479,17 @@ impl Board {
             || expand(expand(self.white | self.black)) & !((self.white | self.black) | self.walls) & BB_ALL == 0
     }
 
+    pub fn outcome(&self) -> Option<Option<Player>> {
+        if !self.game_over() {
+            return None;
+        }
+        match self.white.count_ones().cmp(&self.black.count_ones()) {
+            Ordering::Less => Some(Some(Player::Black)),
+            Ordering::Equal => Some(None),
+            Ordering::Greater => Some(Some(Player::White)),
+        }
+    }
+
     pub fn player_at(&self, sq: Square) -> Option<Player> {
         if self.white & sq.as_set() != 0 {
             Some(Player::White)

@@ -28,9 +28,9 @@ pub enum Move {
 impl Move {
     pub fn index(self) -> usize {
         match self {
-            Move::Single { to } => to.index() + to.index() * (7 * 7),
-            Move::Double { from, to } => to.index() + from.index() * (7 * 7),
-            Move::Pass => Square::A1.index() + Square::G7.index() * (7 * 7),
+            Move::Single { to } => to.compressed_index() + to.compressed_index() * (7 * 7),
+            Move::Double { from, to } => to.compressed_index() + from.compressed_index() * (7 * 7),
+            Move::Pass => Square::A1.compressed_index() + Square::G7.compressed_index() * (7 * 7),
         }
     }
 }
@@ -375,6 +375,10 @@ impl Square {
 
     pub fn name(self) -> Option<&'static str> {
         SQUARE_NAMES.get(self.index()).copied()
+    }
+
+    pub fn compressed_index(self) -> usize {
+        self.file() as usize + self.rank() as usize * 7
     }
 }
 

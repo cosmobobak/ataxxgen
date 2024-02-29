@@ -25,6 +25,16 @@ pub enum Move {
     Pass,
 }
 
+impl Move {
+    pub fn policy_index(self) -> usize {
+        match self {
+            Move::Single { to } => to.index() + to.index() * (7 * 7),
+            Move::Double { from, to } => to.index() + from.index() * (7 * 7),
+            Move::Pass => Square::A1.index() + Square::G7.index() * (7 * 7),
+        }
+    }
+}
+
 static SQUARE_NAMES: [&str; 64] = [
     "a1", "b1", "c1", "d1", "e1", "f1", "g1", "h1", "a2", "b2", "c2", "d2", "e2", "f2", "g2", "h2",
     "a3", "b3", "c3", "d3", "e3", "f3", "g3", "h3", "a4", "b4", "c4", "d4", "e4", "f4", "g4", "h4",

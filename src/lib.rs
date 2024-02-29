@@ -26,7 +26,7 @@ pub enum Move {
 }
 
 impl Move {
-    pub fn policy_index(self) -> usize {
+    pub fn index(self) -> usize {
         match self {
             Move::Single { to } => to.index() + to.index() * (7 * 7),
             Move::Double { from, to } => to.index() + from.index() * (7 * 7),

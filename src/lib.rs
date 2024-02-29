@@ -645,6 +645,30 @@ impl Board {
         let parts: Vec<&str> = fen.split_whitespace().collect();
         self.reset_from_fen_parts(parts.as_slice())
     }
+
+    pub fn feature_map(&self, mut listener: impl FnMut(usize)) {
+        const OFFSET: usize = 7 * 7;
+        let (mut us, mut them) = match self.turn() {
+            Player::White => (self.white, self.black),
+            Player::Black => (self.black, self.white),
+        };
+        while us != 0 {
+            let from = Square::new(us.trailing_zeros() as u8);
+            us &= us - 1;
+            listener(from.compressed_index());
+        }
+        while them != 0 {
+            let from = Square::new(them.trailing_zeros() as u8);
+            them &= them - 1;
+            listener(from.compressed_index() + OFFSET);
+        }
+        let mut walls = self.walls;
+        while walls != 0 {
+            let from = Square::new(walls.trailing_zeros() as u8);
+            walls &= walls - 1;
+            listener(from.compressed_index() + OFFSET * 2);
+        }
+    }
 }
 
 impl FromStr for Board {

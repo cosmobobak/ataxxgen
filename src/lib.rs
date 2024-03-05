@@ -485,6 +485,69 @@ impl Board {
         }
     }
 
+    pub fn make_random_move(&mut self, mut rng: impl FnMut(usize, usize) -> usize) {
+        if self.game_over() {
+            return;
+        }
+
+        let (us, them) = match self.turn() {
+            Player::White => (self.white, self.black),
+            Player::Black => (self.black, self.white),
+        };
+
+        let mut mv_count = 0;
+
+        let empty = !(us | them | self.walls);
+
+        let mut singles = expand(us) & empty;
+        mv_count += singles.count_ones() as usize;
+        let mut any_generated = singles != 0;
+
+        let mut double_map = [0; 64];
+        let mut doubles_src = us;
+        while doubles_src != 0 {
+            let from = Square::new(doubles_src.trailing_zeros() as u8);
+            doubles_src &= doubles_src - 1;
+            let local_singles = expand(from.as_set());
+            let doubles_tgt = expand(local_singles) & empty & !local_singles;
+            any_generated |= doubles_tgt != 0;
+            double_map[from.index()] = doubles_tgt;
+            mv_count += doubles_tgt.count_ones() as usize;
+        }
+
+        if !any_generated {
+            self.make_move(Move::Pass);
+            return;
+        }
+
+        let mut choice = rng(0, mv_count);
+
+        while singles != 0 {
+            let to = Square::new(singles.trailing_zeros() as u8);
+            singles &= singles - 1;
+            if choice == 0 {
+                self.make_move(Move::Single { to });
+                return;
+            }
+            choice -= 1;
+        }
+
+        for (from, mut doubles_tgt) in double_map.into_iter().enumerate() {
+            let from = Square::new(from as u8);
+            while doubles_tgt != 0 {
+                let to = Square::new(doubles_tgt.trailing_zeros() as u8);
+                doubles_tgt &= doubles_tgt - 1;
+                if choice == 0 {
+                    self.make_move(Move::Double { from, to });
+                    return;
+                }
+                choice -= 1;
+            }
+        }
+
+        unreachable!();
+    }
+
     pub fn game_over(&self) -> bool {
         self.white == 0
             || self.black == 0
@@ -770,4 +833,28 @@ pub fn perft(board: &Board, depth: u8) -> u64 {
     });
 
     count
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn make_random_same_as_movelist_idx() {
+        let mut board = super::Board::default();
+        let rng = |lo, hi| if hi > lo + 1 { (5427 * (hi - lo / 2)) % (hi - lo) + lo } else { lo };
+        for _ in 0..100 {
+            let mut board2 = board;
+            let mut moves = Vec::new();
+            board.generate_moves(|mv| {
+                moves.push(mv);
+                false
+            });
+            if moves.is_empty() {
+                break;
+            }
+            let idx = rng(0, moves.len());
+            board.make_random_move(rng);
+            board2.make_move(moves[idx]);
+            assert_eq!(board, board2);
+        }
+    }
 }

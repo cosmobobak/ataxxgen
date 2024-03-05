@@ -370,7 +370,7 @@ impl Square {
     pub const fn gt(self, other: Self) -> bool { self.0 > other.0  }
 
     pub fn all() -> impl Iterator<Item = Self> {
-        (0..64).map(Self::new)
+        (0..64).map(Self::new).filter(|&sq| sq.file() != 7 && sq.rank() != 7)
     }
 
     pub fn name(self) -> Option<&'static str> {
@@ -725,7 +725,7 @@ impl Board {
             them &= them - 1;
             listener(from.compressed_index() + OFFSET);
         }
-        let mut walls = self.walls;
+        let mut walls = self.walls & BB_ALL;
         while walls != 0 {
             let from = Square::new(walls.trailing_zeros() as u8);
             walls &= walls - 1;
@@ -856,5 +856,22 @@ mod tests {
             board2.make_move(moves[idx]);
             assert_eq!(board, board2);
         }
+    }
+
+    #[test]
+    fn squares_correctly_on_board() {
+        use super::Square;
+        for sq in Square::all() {
+            let ci = sq.compressed_index();
+            assert!(ci < 7 * 7);
+        }
+    }
+
+    #[test]
+    fn feature_map_in_bounds() {
+        let board = super::Board::default();
+        board.feature_map(|idx| {
+            assert!(idx < 7 * 7 * 3);
+        });
     }
 }

@@ -1,3 +1,5 @@
+pub mod perft;
+
 use std::{cmp::Ordering, fmt::{self, Display, Formatter}, str::FromStr};
 
 
@@ -31,6 +33,20 @@ impl Move {
             Move::Single { to } => to.compressed_index() + to.compressed_index() * (7 * 7),
             Move::Double { from, to } => to.compressed_index() + from.compressed_index() * (7 * 7),
             Move::Pass => Square::A1.compressed_index() + Square::G7.compressed_index() * (7 * 7),
+        }
+    }
+
+    pub fn from_index(index: usize) -> Self {
+        if index == Square::A1.compressed_index() + Square::G7.compressed_index() * (7 * 7) {
+            Move::Pass
+        } else {
+            let to = Square::from_compressed_index(index % (7 * 7));
+            let from = Square::from_compressed_index(index / (7 * 7));
+            if from == to {
+                Move::Single { to }
+            } else {
+                Move::Double { from, to }
+            }
         }
     }
 }
@@ -379,6 +395,10 @@ impl Square {
 
     pub fn compressed_index(self) -> usize {
         self.file() as usize + self.rank() as usize * 7
+    }
+
+    pub fn from_compressed_index(index: usize) -> Self {
+        Self::from_rank_file((index / 7) as u8, (index % 7) as u8)
     }
 }
 
@@ -810,31 +830,6 @@ impl Display for FenError {
     }
 }
 
-pub fn perft(board: &Board, depth: u8) -> u64 {
-    if depth == 0 {
-        return 1;
-    }
-
-    if depth == 1 {
-        let mut count = 0;
-        board.generate_moves(|_| {
-            count += 1;
-            false
-        });
-        return count;
-    }
-
-    let mut count = 0;
-    board.generate_moves(|mv| {
-        let mut board = *board;
-        board.make_move(mv);
-        count += perft(&board, depth - 1);
-        false
-    });
-
-    count
-}
-
 #[cfg(test)]
 mod tests {
     #[test]
@@ -873,5 +868,22 @@ mod tests {
         board.feature_map(|idx| {
             assert!(idx < 7 * 7 * 3);
         });
+    }
+
+    #[test]
+    fn move_index_roundtrip() {
+        use super::Square;
+        let pass = super::Move::Pass;
+        assert_eq!(pass, super::Move::from_index(pass.index()));
+        for single in super::Square::all() {
+            let mv = super::Move::Single { to: single };
+            assert_eq!(mv, super::Move::from_index(mv.index()));
+        }
+        for from in super::Square::all() {
+            for to in super::Square::all().filter(|&to| to != from && !(to == Square::A1 && from == Square::G7)) {
+                let mv = super::Move::Double { from, to };
+                assert_eq!(mv, super::Move::from_index(mv.index()));
+            }
+        }
     }
 }

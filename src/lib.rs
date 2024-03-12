@@ -774,6 +774,10 @@ impl FromStr for Board {
 
 impl Display for Board {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        const BLD: &str = "\x1b[1m";
+        const RED: &str = "\x1b[31m";
+        const BLU: &str = "\x1b[34m";
+        const RST: &str = "\x1b[0m";
         for rank in (0u8..7).rev() {
             writeln!(f, " +---+---+---+---+---+---+---+")?;
 
@@ -783,9 +787,13 @@ impl Display for Board {
                     f,
                     " | {}",
                     if self.wall_at(sq) {
-                        '-'
+                        "-".into()
                     } else {
-                        self.player_at(sq).map_or(' ', |p| p.to_char())
+                        match self.player_at(sq) {
+                            Some(Player::White) => format!("{BLD}{RED}X{RST}"),
+                            Some(Player::Black) => format!("{BLD}{BLU}O{RST}"),
+                            None => " ".into(),
+                        }
                     }
                 )?;
             }
@@ -801,9 +809,9 @@ impl Display for Board {
             f,
             "{} to move",
             if self.turn() == Player::White {
-                "White"
+                format!("{BLD}{RED}Red{RST} [X]")
             } else {
-                "Black"
+                format!("{BLD}{BLU}Blue{RST} [O]")
             }
         )
     }

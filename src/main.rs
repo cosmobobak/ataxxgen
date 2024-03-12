@@ -3,6 +3,8 @@ use ataxxgen::{Board, perft};
 fn main() {
     // run benchmarks...
 
+    println!("Starting position: \n{}", Board::default());
+
     // // perft depth 4 on a 15x15 board:
     // let start_time = std::time::Instant::now();
     // let count = perft::perft(board::Board::<15>::new(), 4);

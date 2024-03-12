@@ -779,13 +779,18 @@ impl Display for Board {
         const BLU: &str = "\x1b[34m";
         const RST: &str = "\x1b[0m";
         for rank in (0u8..7).rev() {
-            writeln!(f, " +---+---+---+---+---+---+---+")?;
+            // writeln!(f, " +---+---+---+---+---+---+---+")?;
+            if rank == 6 {
+                writeln!(f, " ╭───┬───┬───┬───┬───┬───┬───╮")?;
+            } else {
+                writeln!(f, " ├───┼───┼───┼───┼───┼───┼───┤")?;
+            }
 
             for file in 0u8..7 {
                 let sq = Square::from_rank_file(rank, file);
                 write!(
                     f,
-                    " | {}",
+                    " │ {}",
                     if self.wall_at(sq) {
                         "-".into()
                     } else {
@@ -798,10 +803,11 @@ impl Display for Board {
                 )?;
             }
 
-            writeln!(f, " | {}", rank + 1)?;
+            writeln!(f, " │ {}", rank + 1)?;
         }
 
-        writeln!(f, " +---+---+---+---+---+---+---+")?;
+        // writeln!(f, " +---+---+---+---+---+---+---+")?;
+        writeln!(f, " ╰───┴───┴───┴───┴───┴───┴───╯")?;
         writeln!(f, "   a   b   c   d   e   f   g")?;
         writeln!(f)?;
 

@@ -660,7 +660,13 @@ impl Board {
             Ordering::Equal => {}
         }
 
-        let mut state = Self::default();
+        let mut state = Self {
+            white: 0,
+            black: 0,
+            walls: 0,
+            ply: 0,
+            halfmove: 0,
+        };
 
         for (rank_idx, rank) in ranks.iter().enumerate() {
             let mut file_idx: u8 = 0;
@@ -719,7 +725,9 @@ impl Board {
             return Err(FenError::InvalidFullmove);
         };
 
-        self.ply = ((fullmove - 1) * 2 + if black_to_move { 1 } else { 0 }) as u8;
+        state.ply = ((fullmove - 1) * 2 + if black_to_move { 1 } else { 0 }) as u8;
+
+        *self = state;
 
         Ok(())
     }
